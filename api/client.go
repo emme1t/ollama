@@ -226,6 +226,10 @@ func (c *Client) stream(ctx context.Context, method, path string, data any, fn f
 
 		bts := scanner.Bytes()
 		if err := json.Unmarshal(bts, &errorResponse); err != nil {
+			// Scanner can return a partial final line after a read failure.
+			if readErr := scanner.Err(); readErr != nil {
+				return readErr
+			}
 			if response.StatusCode >= http.StatusBadRequest {
 				return StatusError{
 					StatusCode:   response.StatusCode,
