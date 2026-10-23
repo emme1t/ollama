@@ -380,7 +380,7 @@ func (u *uploader) initUpload(ctx context.Context, blob Blob) (uploadEndpoint, e
 		}
 		base, _ := url.Parse(u.baseURL)
 		if !sessionURL.IsAbs() {
-			sessionURL = base.ResolveReference(sessionURL)
+			sessionURL = req.URL.ResolveReference(sessionURL)
 		}
 		if err := ValidateRedirectScheme(sessionURL, u.baseURL); err != nil {
 			return uploadEndpoint{}, err
