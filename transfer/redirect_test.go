@@ -230,6 +230,8 @@ func TestCheckedClientExemptsBaseHost(t *testing.T) {
 }
 
 func TestValidateRedirectTarget(t *testing.T) {
+	withProxy(t, nil)
+	withFailingRedirectDNS(t)
 	ctx := context.Background()
 	okPublic, _ := url.Parse("https://8.8.8.8/blob")
 	httpsBase := "https://registry.example.com"
@@ -409,6 +411,20 @@ func withProxy(t *testing.T, proxy *url.URL) {
 	t.Cleanup(func() { proxyFromEnvironment = orig })
 }
 
+// withFailingRedirectDNS makes DNS-failure assertions independent of the host
+// resolver. Keep localhost resolvable so its private-address rejection is tested.
+func withFailingRedirectDNS(t *testing.T) {
+	t.Helper()
+	orig := lookupRedirectIPs
+	lookupRedirectIPs = func(_ context.Context, _, host string) ([]net.IP, error) {
+		if host == "localhost" {
+			return []net.IP{net.IPv4(127, 0, 0, 1)}, nil
+		}
+		return nil, &net.DNSError{Err: "test host not found", Name: host, IsNotFound: true}
+	}
+	t.Cleanup(func() { lookupRedirectIPs = orig })
+}
+
 func TestRedirectClientUsesProxy(t *testing.T) {
 	// Behind a proxy the CDN host is unreachable directly; the request
 	// must be handed to the proxy instead of dialed. .invalid never
@@ -484,6 +500,8 @@ func TestConcurrentProxyAndDirectRequests(t *testing.T) {
 }
 
 func TestValidateRedirectTargetBehindProxy(t *testing.T) {
+	withProxy(t, nil)
+	withFailingRedirectDNS(t)
 	// When the proxy will carry the request, redirect validation must not
 	// consult local DNS at all: resolution outcomes are registry-influenced
 	// and must not be usable as a validation oracle. Targets that will be
@@ -515,6 +533,8 @@ func TestValidateRedirectTargetBehindProxy(t *testing.T) {
 }
 
 func TestValidateRedirectTargetDefaultRegistryHostsSkipLocalDNS(t *testing.T) {
+	withProxy(t, nil)
+	withFailingRedirectDNS(t)
 	// The default registry and its CDN hostnames are trusted without a
 	// local DNS lookup, so a proxied (or DNS-less) host still pulls. This
 	// must not relax checks for any other hostname, nor for IP literals.
