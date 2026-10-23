@@ -374,7 +374,10 @@ func (u *uploader) initUpload(ctx context.Context, blob Blob) (uploadEndpoint, e
 			continue
 		}
 
-		sessionURL, _ := url.Parse(loc)
+		sessionURL, err := url.Parse(loc)
+		if err != nil {
+			return uploadEndpoint{}, fmt.Errorf("invalid upload location: %w", err)
+		}
 		base, _ := url.Parse(u.baseURL)
 		if !sessionURL.IsAbs() {
 			sessionURL = base.ResolveReference(sessionURL)
