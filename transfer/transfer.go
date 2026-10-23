@@ -201,44 +201,56 @@ func digestToPath(digest string) string {
 	return digest
 }
 
-// parseAuthChallenge parses a WWW-Authenticate header value.
+// parseAuthChallenge parses a Bearer WWW-Authenticate challenge.
 // Example: Bearer realm="https://auth.example.com",service="registry",scope="repository:foo:pull"
 func parseAuthChallenge(header string) AuthChallenge {
-	header = strings.TrimPrefix(header, "Bearer ")
-
-	getValue := func(key string) string {
-		startIdx := strings.Index(header, key+"=")
-		if startIdx == -1 {
-			return ""
+	scheme, params, ok := strings.Cut(strings.TrimSpace(header), " ")
+	if !ok || !strings.EqualFold(scheme, "Bearer") {
+		return AuthChallenge{}
+	}
+	var challenge AuthChallenge
+	for params != "" {
+		name, rest, ok := strings.Cut(strings.TrimLeft(params, ", \t"), "=")
+		if !ok {
+			break
 		}
-		startIdx += len(key) + 1
-		if startIdx >= len(header) {
-			return ""
-		}
-
-		// Handle quoted values
-		if header[startIdx] == '"' {
-			startIdx++
-			endIdx := strings.Index(header[startIdx:], "\"")
-			if endIdx == -1 {
-				return header[startIdx:]
+		rest = strings.TrimLeft(rest, " \t")
+		var value string
+		if strings.HasPrefix(rest, `"`) {
+			rest = rest[1:]
+			var quoted strings.Builder
+			closed := false
+			for len(rest) > 0 {
+				c := rest[0]
+				rest = rest[1:]
+				if c == '"' {
+					closed = true
+					break
+				}
+				if c == '\\' && len(rest) > 0 {
+					c, rest = rest[0], rest[1:]
+				}
+				quoted.WriteByte(c)
 			}
-			return header[startIdx : startIdx+endIdx]
+			if !closed {
+				break
+			}
+			value = quoted.String()
+		} else {
+			value, rest, _ = strings.Cut(rest, ",")
+			value = strings.TrimSpace(value)
 		}
-
-		// Unquoted value - ends at comma or end of string
-		endIdx := strings.Index(header[startIdx:], ",")
-		if endIdx == -1 {
-			return header[startIdx:]
+		switch strings.ToLower(strings.TrimSpace(name)) {
+		case "realm":
+			challenge.Realm = value
+		case "service":
+			challenge.Service = value
+		case "scope":
+			challenge.Scope = value
 		}
-		return header[startIdx : startIdx+endIdx]
+		params = strings.TrimLeft(rest, ", \t")
 	}
-
-	return AuthChallenge{
-		Realm:   getValue("realm"),
-		Service: getValue("service"),
-		Scope:   getValue("scope"),
-	}
+	return challenge
 }
 
 // backoff returns a function that sleeps with exponential backoff.
